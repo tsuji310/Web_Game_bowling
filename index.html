@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>3D クソボウリング - カチコチピン破壊対応版</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #090d16;
+            font-family: 'Hiragino Kaku Gothic ProN', sans-serif;
+            color: white;
+            user-select: none;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .scoreboard {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 15px 25px;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            display: flex;
+            gap: 20px;
+            align-self: center;
+        }
+
+        .player-card {
+            text-align: center;
+            padding: 8px 16px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            min-width: 90px;
+        }
+
+        .player-card.active {
+            border: 2px solid #facc15;
+            background: rgba(250, 204, 21, 0.2);
+            transform: scale(1.05);
+        }
+
+        .player-name { font-weight: bold; font-size: 16px; margin-bottom: 4px; }
+        .player-score { font-size: 24px; color: #38bdf8; font-weight: bold; }
+
+        #msg-box {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 32px;
+            font-weight: bold;
+            color: #facc15;
+            text-shadow: 0 0 12px rgba(0,0,0,0.8), 0 0 20px rgba(250,204,21,0.5);
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        #gimmick-box {
+            position: absolute;
+            top: 13%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 18px;
+            font-weight: bold;
+            color: #38bdf8;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 6px 16px;
+            border-radius: 20px;
+            border: 1px solid rgba(56, 189, 248, 0.4);
+        }
+
+        #power-gauge-container {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 340px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 10px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .gauge-label {
+            font-size: 13px;
+            font-weight: bold;
+            color: #facc15;
+            text-align: center;
+        }
+
+        .gauge-bar-outer {
+            width: 100%;
+            height: 22px;
+            background: #1e293b;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
+        }
+
+        .gauge-bar-outer::after {
+            content: '';
+            position: absolute;
+            right: 0; top: 0;
+            width: 10%; height: 100%;
+            background: rgba(239, 68, 68, 0.4);
+            border-left: 2px dashed #ef4444;
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+
+        .gauge-bar-inner {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #38bdf8 0%, #facc15 80%, #ef4444 90%);
+            border-radius: 10px;
+        }
+
+        .controls-hint {
+            background: rgba(15, 23, 42, 0.85);
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            align-self: center;
+            margin-bottom: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .controls-hint span {
+            background: #334155;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #38bdf8;
+            font-weight: bold;
+        }
+
+        #menu-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 15, 30, 0.95);
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            pointer-events: auto;
+        }
+
+        #menu-screen h1 {
+            font-size: 48px;
+            color: #f97316;
+            margin-bottom: 5px;
+            text-shadow: 0 0 20px rgba(249, 115, 22, 0.5);
+        }
+
+        #menu-screen p.subtitle { color: #94a3b8; margin-bottom: 25px; }
+
+        .section-label {
+            font-size: 14px;
+            color: #facc15;
+            font-weight: bold;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+
+        .option-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        .opt-btn {
+            background: #1e293b;
+            border: 2px solid #334155;
+            color: #94a3b8;
+            padding: 8px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .opt-btn:hover {
+            border-color: #38bdf8;
+            color: white;
+        }
+
+        .opt-btn.selected {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: #38bdf8;
+            color: #38bdf8;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+        }
+
+        .btn-group { display: flex; gap: 15px; }
+
+        .btn {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            border: none;
+            color: white;
+            padding: 14px 28px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(37, 99, 235, 0.6);
+        }
+
+        #result-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 15, 30, 0.9);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 90;
+            pointer-events: auto;
+        }
+
+        #result-screen h2 { font-size: 40px; color: #facc15; margin-bottom: 20px; }
+        #result-list { font-size: 20px; margin-bottom: 30px; text-align: left; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-overlay">
+        <div class="scoreboard" id="scoreboard"></div>
+        <div id="gimmick-box">【ギミック】うようよ移動中！</div>
+        <div id="msg-box"></div>
+
+        <div id="power-gauge-container">
+            <div class="gauge-label" id="gauge-status">位置決め中: Spaceでパワー決定</div>
+            <div class="gauge-bar-outer">
+                <div class="gauge-bar-inner" id="gauge-bar"></div>
+            </div>
+        </div>
+
+        <div class="controls-hint">
+            左右移動: <span>←</span> <span>→</span> / <span>A</span> <span>D</span> | 決定・投球: <span>Space</span>
+        </div>
+    </div>
+
+    <!-- メニュー画面 -->
+    <div id="menu-screen">
+        <h1>3D クソボウリング</h1>
+        <p class="subtitle">ピンが本気で倒れるのを拒否してくるボウリングゲーム</p>
+
+        <!-- フレーム数選択 -->
+        <div class="section-label">■ フレーム数を選択</div>
+        <div class="option-group">
+            <button class="opt-btn selected" id="frame-btn-3" onclick="selectFrame(3)">3 フレーム</button>
+            <button class="opt-btn" id="frame-btn-5" onclick="selectFrame(5)">5 フレーム</button>
+            <button class="opt-btn" id="frame-btn-10" onclick="selectFrame(10)">10 フレーム</button>
+        </div>
+
+        <!-- プレイ人数選択 -->
+        <div class="section-label">■ プレイ人数を選択してスタート</div>
+        <div class="btn-group">
+            <button class="btn" onclick="setupGame(1)">1人プレイ</button>
+            <button class="btn" onclick="setupGame(2)">2人対戦</button>
+            <button class="btn" onclick="setupGame(3)">3人対戦</button>
+            <button class="btn" onclick="setupGame(4)">4人対戦</button>
+        </div>
+    </div>
+
+    <!-- 結果画面 -->
+    <div id="result-screen">
+        <h2>最終結果</h2>
+        <div id="result-list"></div>
+        <button class="btn" onclick="returnToMenu()">タイトルに戻る</button>
+    </div>
+
+<script>
+// --- ゲーム定数・変数 ---
+const LANE_WIDTH = 6;
+const LANE_LENGTH = 30;
+
+let totalFrames = 3; // デフォルト3フレーム設定
+let numPlayers = 1;
+let players = [];
+let currentPlayerIdx = 0;
+let currentFrame = 1;
+let currentThrow = 1;
+
+let ballState = 'aiming_pos'; 
+
+let powerVal = 0;
+let powerDir = 1;
+let chosenPower = 0.5;
+
+let pins = []; 
+let pinMoveType = 'wave'; 
+let moveTime = 0;
+let rollTimeoutTimer = null;
+
+let scene, camera, renderer;
+let ballMesh;
+let ballPhysics = { x: 0, z: 10, vx: 0, vz: 0, speed: 0.35 };
+
+const keys = {};
+let spacePressed = false;
+
+window.addEventListener('keydown', e => {
+    if (e.key === ' ' && !spacePressed) {
+        spacePressed = true;
+        handleSpaceAction();
+    }
+    keys[e.key] = true;
+});
+
+window.addEventListener('keyup', e => {
+    if (e.key === ' ') spacePressed = false;
+    keys[e.key] = false;
+});
+
+// --- フレーム選択設定 ---
+function selectFrame(count) {
+    totalFrames = count;
+    document.querySelectorAll('.opt-btn').forEach(btn => btn.classList.remove('selected'));
+    document.getElementById(`frame-btn-${count}`).classList.add('selected');
+}
+
+// --- 初期化 ---
+function initThree() {
+    const container = document.getElementById('canvas-container');
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x090d16);
+
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    resetCamera();
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    createLane();
+    createBall();
+
+    window.addEventListener('resize', onWindowResize);
+    requestAnimationFrame(gameLoop);
+}
+
+function resetCamera() {
+    camera.position.set(0, 4, 16);
+    camera.lookAt(0, 0, -10);
+}
+
+function createLane() {
+    const laneGeo = new THREE.BoxGeometry(LANE_WIDTH, 0.2, LANE_LENGTH);
+    const laneMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.2 });
+    const lane = new THREE.Mesh(laneGeo, laneMat);
+    lane.position.set(0, -0.1, -2);
+    lane.receiveShadow = true;
+    scene.add(lane);
+
+    const gutterGeo = new THREE.BoxGeometry(1.5, 0.1, LANE_LENGTH);
+    const gutterMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
+    
+    const leftGutter = new THREE.Mesh(gutterGeo, gutterMat);
+    leftGutter.position.set(-LANE_WIDTH/2 - 0.75, -0.15, -2);
+    scene.add(leftGutter);
+
+    const rightGutter = new THREE.Mesh(gutterGeo, gutterMat);
+    rightGutter.position.set(LANE_WIDTH/2 + 0.75, -0.15, -2);
+    scene.add(rightGutter);
+}
+
+function createBall() {
+    const ballGeo = new THREE.SphereGeometry(0.5, 32, 32);
+    const ballMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.1, metalness: 0.3 });
+    ballMesh = new THREE.Mesh(ballGeo, ballMat);
+    ballMesh.castShadow = true;
+    scene.add(ballMesh);
+    resetBall();
+}
+
+function resetBall() {
+    if (rollTimeoutTimer) clearTimeout(rollTimeoutTimer);
+
+    ballPhysics.x = 0;
+    ballPhysics.z = 10;
+    ballPhysics.vx = 0;
+    ballPhysics.vz = 0;
+    ballPhysics.speed = 0.35;
+    
+    ballMesh.position.set(0, 0.5, 10);
+    ballMesh.rotation.set(0, 0, 0);
+
+    ballState = 'aiming_pos';
+    powerVal = 0;
+    powerDir = 1;
+    document.getElementById('gauge-status').textContent = '位置決め中: Spaceでパワー決定';
+    document.getElementById('gauge-bar').style.width = '0%';
+}
+
+function spawnPins() {
+    pins.forEach(p => scene.remove(p.mesh));
+    pins = [];
+
+    if (Math.random() < 0.5) {
+        pinMoveType = 'wave';
+        document.getElementById('gimmick-box').textContent = '【ギミック】うようよ横移動！';
+    } else {
+        pinMoveType = 'rotate';
+        document.getElementById('gimmick-box').textContent = '【ギミック】グルグル回転移動！';
+    }
+
+    const pinPositions = [
+        { x: 0, z: -12 },
+        { x: -0.6, z: -13 }, { x: 0.6, z: -13 },
+        { x: -1.2, z: -14 }, { x: 0, z: -14 }, { x: 1.2, z: -14 },
+        { x: -1.8, z: -15 }, { x: -0.6, z: -15 }, { x: 0.6, z: -15 }, { x: 1.8, z: -15 }
+    ];
+
+    pinPositions.forEach((pos) => {
+        const group = new THREE.Group();
+
+        const bodyGeo = new THREE.CylinderGeometry(0.15, 0.25, 1.2, 16);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.6;
+        body.castShadow = true;
+        group.add(body);
+
+        const ringGeo = new THREE.CylinderGeometry(0.18, 0.2, 0.2, 16);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.y = 0.9;
+        group.add(ring);
+
+        group.position.set(pos.x, 0, pos.z);
+        scene.add(group);
+
+        let rand = Math.random();
+        let trait = 'normal';
+        if (rand < 0.50) trait = 'normal';
+        else if (rand < 0.75) trait = 'dodge';
+        else if (rand < 0.90) trait = 'jump';
+        else trait = 'hard';
+
+        pins.push({
+            mesh: group,
+            baseX: pos.x,
+            baseZ: pos.z,
+            isFallen: false,
+            trait: trait,
+            vx: 0, vz: 0, rvX: 0, rvZ: 0
+        });
+    });
+}
+
+function handleSpaceAction() {
+    if (ballState === 'aiming_pos') {
+        ballState = 'aiming_power';
+        document.getElementById('gauge-status').textContent = 'パワー選択: 赤（90%〜）は暴投リスク＆カチコチピン破壊！';
+    } else if (ballState === 'aiming_power') {
+        ballState = 'rolling';
+        chosenPower = Math.max(5, powerVal);
+        
+        if (chosenPower >= 90) {
+            let isWild = Math.random() < 0.3;
+
+            if (isWild) {
+                ballPhysics.speed = 0.85;
+                ballPhysics.vz = -ballPhysics.speed;
+                let wildDir = Math.random() < 0.5 ? -1 : 1;
+                ballPhysics.vx = wildDir * (0.2 + Math.random() * 0.15);
+                
+                document.getElementById('gauge-status').textContent = `POWER: ${Math.round(chosenPower)}% 【暴投発動！】`;
+                showMessage("【暴投】力みすぎてすっぽぬけた！！", 1500);
+            } else {
+                ballPhysics.speed = 0.8;
+                ballPhysics.vz = -ballPhysics.speed;
+                ballPhysics.vx = 0;
+
+                document.getElementById('gauge-status').textContent = `POWER: ${Math.round(chosenPower)}% 【ナイスコントロール！】`;
+                showMessage("【超強力ショット】カチコチピンも粉砕可能！", 1500);
+            }
+        } else {
+            ballPhysics.speed = 0.25 + (chosenPower / 100) * 0.45;
+            ballPhysics.vz = -ballPhysics.speed;
+            ballPhysics.vx = 0;
+            
+            document.getElementById('gauge-status').textContent = `投球パワー: ${Math.round(chosenPower)}%`;
+            if (chosenPower >= 80) showMessage("ナイスショット！", 1000);
+            else showMessage("投球！", 1000);
+        }
+
+        rollTimeoutTimer = setTimeout(() => {
+            if (ballState === 'rolling') finishRolling();
+        }, 5000);
+    }
+}
+
+// --- ゲーム進行・UI ---
+function setupGame(count) {
+    numPlayers = count;
+    players = [];
+    for (let i = 0; i < count; i++) {
+        players.push({ id: i + 1, name: `${i + 1}P`, score: 0 });
+    }
+
+    currentPlayerIdx = 0;
+    currentFrame = 1;
+    currentThrow = 1;
+
+    document.getElementById('menu-screen').style.display = 'none';
+    document.getElementById('result-screen').style.display = 'none';
+
+    updateScoreboardUI();
+    spawnPins();
+    resetBall();
+    showMessage(`${players[0].name} の番です！ (第1/${totalFrames}フレーム)`);
+}
+
+function updateScoreboardUI() {
+    const container = document.getElementById('scoreboard');
+    container.innerHTML = '';
+    players.forEach((p, idx) => {
+        const card = document.createElement('div');
+        card.className = `player-card ${idx === currentPlayerIdx ? 'active' : ''}`;
+        card.innerHTML = `
+            <div class="player-name">${p.name}</div>
+            <div class="player-score">${p.score}</div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+function showMessage(text, duration = 2000) {
+    const box = document.getElementById('msg-box');
+    box.textContent = text;
+    if (duration > 0) {
+        setTimeout(() => {
+            if (box.textContent === text) box.textContent = '';
+        }, duration);
+    }
+}
+
+// --- メインループ ---
+function gameLoop() {
+    updateBallPosition();
+    updatePinsBehavior();
+    checkCollisions();
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(gameLoop);
+}
+
+function updateBallPosition() {
+    if (ballState === 'aiming_pos') {
+        if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+            ballPhysics.x = Math.max(-LANE_WIDTH/2 + 0.5, ballPhysics.x - 0.08);
+        }
+        if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+            ballPhysics.x = Math.min(LANE_WIDTH/2 - 0.5, ballPhysics.x + 0.08);
+        }
+        ballMesh.position.x = ballPhysics.x;
+    } 
+    else if (ballState === 'aiming_power') {
+        powerVal += powerDir * 1.75; 
+        if (powerVal >= 100) { powerVal = 100; powerDir = -1; }
+        if (powerVal <= 0) { powerVal = 0; powerDir = 1; }
+        document.getElementById('gauge-bar').style.width = `${powerVal}%`;
+    } 
+    else if (ballState === 'rolling') {
+        ballPhysics.z += ballPhysics.vz;
+        ballPhysics.x += ballPhysics.vx;
+        
+        ballMesh.position.z = ballPhysics.z;
+        ballMesh.position.x = ballPhysics.x;
+        ballMesh.rotation.x -= Math.abs(ballPhysics.vz) * 0.5;
+
+        if (ballPhysics.vx !== 0) {
+            ballMesh.rotation.z += 0.3;
+        }
+
+        camera.position.z = ballMesh.position.z + 6;
+        camera.position.x = ballMesh.position.x * 0.5;
+
+        if (ballPhysics.z < -18 || ballPhysics.z > 15 || Math.abs(ballPhysics.x) > LANE_WIDTH/2 + 2) {
+            finishRolling();
+        }
+    }
+}
+
+function finishRolling() {
+    if (ballState !== 'rolling') return;
+    if (rollTimeoutTimer) clearTimeout(rollTimeoutTimer);
+    ballState = 'evaluating';
+    setTimeout(evaluateThrow, 800);
+}
+
+function updatePinsBehavior() {
+    moveTime += 0.03;
+
+    pins.forEach(pin => {
+        if (pin.isFallen) {
+            pin.mesh.position.x += pin.vx;
+            pin.mesh.position.z += pin.vz;
+            pin.mesh.rotation.x += pin.rvX;
+            pin.mesh.rotation.z += pin.rvZ;
+            
+            pin.vx *= 0.96;
+            pin.vz *= 0.96;
+            return;
+        }
+
+        if (pinMoveType === 'wave') {
+            let offsetX = Math.sin(moveTime * 2) * 1.2;
+            pin.mesh.position.x = pin.baseX + offsetX;
+        } else if (pinMoveType === 'rotate') {
+            let centerZ = -13.5;
+            let relZ = pin.baseZ - centerZ;
+            let angle = moveTime * 1.5;
+            let cos = Math.cos(angle);
+            let sin = Math.sin(angle);
+            
+            pin.mesh.position.x = pin.baseX * cos - relZ * sin;
+            pin.mesh.position.z = centerZ + (pin.baseX * sin + relZ * cos);
+        }
+
+        let dist = Math.hypot(ballMesh.position.x - pin.mesh.position.x, ballMesh.position.z - pin.mesh.position.z);
+
+        if (ballState === 'rolling' && dist < 3.0) {
+            if (pin.trait === 'dodge') {
+                let dodgeDir = pin.mesh.position.x >= ballMesh.position.x ? 1 : -1;
+                pin.mesh.position.x += dodgeDir * 0.06;
+            } else if (pin.trait === 'jump') {
+                if (pin.mesh.position.y < 1.4) {
+                    pin.mesh.position.y += 0.12;
+                }
+            }
+        }
+    });
+}
+
+function checkCollisions() {
+    if (ballState !== 'rolling' && ballState !== 'evaluating') return;
+
+    let powerMultiplier = 0.5 + (chosenPower / 50);
+
+    if (ballState === 'rolling') {
+        pins.forEach(pin => {
+            if (pin.isFallen) return;
+
+            let dx = ballMesh.position.x - pin.mesh.position.x;
+            let dz = ballMesh.position.z - pin.mesh.position.z;
+            let dy = ballMesh.position.y - pin.mesh.position.y;
+            let dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+            if (dist < 0.75) {
+                if (pin.trait === 'hard' && chosenPower < 90) {
+                    ballPhysics.vz = Math.abs(ballPhysics.vz) * 0.4;
+                    ballPhysics.vx = (Math.random() - 0.5) * 0.3;
+                    showMessage("【カチコチピン】弾かれた！（90%以上のパワーで破壊可能）", 1000);
+                } else {
+                    knockOverPin(pin, -dx * 0.3 * powerMultiplier, -0.4 * powerMultiplier);
+                    if (pin.trait === 'hard') showMessage("【カチコチピン粉砕！】超威力で倒した！", 1200);
+                    else if (pin.trait === 'dodge') showMessage("よけ損ねた！", 800);
+                    else if (pin.trait === 'jump') showMessage("空中撃墜！", 800);
+                }
+            }
+        });
+    }
+
+    pins.filter(p => p.isFallen).forEach(fallenPin => {
+        pins.filter(p => !p.isFallen).forEach(targetPin => {
+            let dx = fallenPin.mesh.position.x - targetPin.mesh.position.x;
+            let dz = fallenPin.mesh.position.z - targetPin.mesh.position.z;
+            let dist = Math.sqrt(dx*dx + dz*dz);
+
+            if (dist < 0.8) {
+                knockOverPin(targetPin, -dx * 0.5, fallenPin.vz * 0.8);
+            }
+        });
+    });
+}
+
+function knockOverPin(pin, vx, vz) {
+    pin.isFallen = true;
+    pin.vx = vx;
+    pin.vz = vz;
+    pin.rvX = (Math.random() - 0.5) * 0.4;
+    pin.rvZ = (Math.random() - 0.5) * 0.4;
+    pin.mesh.rotation.x = Math.PI / 2;
+}
+
+function evaluateThrow() {
+    let fallenCount = pins.filter(p => p.isFallen).length;
+    let newlyFallen = fallenCount - (pins.alreadyCounted || 0);
+    pins.alreadyCounted = fallenCount;
+
+    players[currentPlayerIdx].score += newlyFallen;
+    updateScoreboardUI();
+
+    if (newlyFallen === 10 && currentThrow === 1) {
+        showMessage("豪快ストライク！！", 2000);
+        nextTurn(true);
+    } else if (currentThrow === 1) {
+        showMessage(`${newlyFallen}本ヒット！（2投目へ）`, 1500);
+        currentThrow = 2;
+        resetBall();
+        resetCamera();
+    } else {
+        showMessage(`2投目: ${newlyFallen}本追加！`, 1500);
+        nextTurn(false);
+    }
+}
+
+function nextTurn(isStrike) {
+    currentThrow = 1;
+    pins.alreadyCounted = 0;
+
+    currentPlayerIdx++;
+    if (currentPlayerIdx >= numPlayers) {
+        currentPlayerIdx = 0;
+        currentFrame++;
+    }
+
+    if (currentFrame > totalFrames) {
+        setTimeout(showFinalResults, 1500);
+    } else {
+        setTimeout(() => {
+            spawnPins();
+            resetBall();
+            resetCamera();
+            updateScoreboardUI();
+            showMessage(`${players[currentPlayerIdx].name} の番です (第${currentFrame}/${totalFrames}フレーム)`);
+        }, 1500);
+    }
+}
+
+function showFinalResults() {
+    document.getElementById('result-screen').style.display = 'flex';
+    const list = document.getElementById('result-list');
+    
+    let sorted = [...players].sort((a, b) => b.score - a.score);
+    
+    list.innerHTML = sorted.map((p, rank) => `
+        <div style="margin: 10px 0;">
+            ${rank + 1}位: <strong>${p.name}</strong> - ${p.score}点
+        </div>
+    `).join('');
+}
+
+function returnToMenu() {
+    document.getElementById('result-screen').style.display = 'none';
+    document.getElementById('menu-screen').style.display = 'flex';
+    resetCamera();
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+window.addEventListener('load', initThree);
+</script>
+</body>
+</html>
